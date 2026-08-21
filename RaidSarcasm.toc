@@ -3,4 +3,6 @@
 ## Notes: Custom random emotes for "special" raid members.
 ## Author: Interacti0n
 
-RaidSarcasm.lua
+Core.lua
+Emotes.lua
+UI.lua
