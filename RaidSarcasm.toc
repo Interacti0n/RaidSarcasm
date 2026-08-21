@@ -1,0 +1,6 @@
+## Interface: 50400
+## Title: RaidSarcasm
+## Notes: Custom random emotes for "special" raid members.
+## Author: Interacti0n
+
+RaidSarcasm.lua
