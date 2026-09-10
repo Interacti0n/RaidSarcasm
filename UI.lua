@@ -1,148 +1,105 @@
--- GUI menu
+local addonName, ns = ...
+local menu, mainButton, subMenu
+local buttons = {}
 
-local f = CreateFrame("Frame", "RaidSarcasmMenu", UIParent)
-f:SetSize(160, 26)
-f:SetPoint("CENTER", 0, 0)
-f:SetAlpha(0.70)
-
--- Allow the frame to be moved
-
-f:SetMovable(true)
-f:EnableMouse(true)
-f:RegisterForDrag("LeftButton")
-
-f:SetScript("OnDragStart", function(self)
-    self:StartMoving()
-end)
-
-f:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-end)
-
--- Main button to toggle the menu
-
-local mainBtn = CreateFrame("Button", nil, f)
-mainBtn:SetSize(160, 26)
-mainBtn:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-mainBtn:SetText("Raid Sarcasm [+]")
-
-SkinButton(mainBtn)
-
--- Redirect dragging from the button to the entire frame
-
-mainBtn:RegisterForDrag("LeftButton")
-
-mainBtn:SetScript("OnDragStart", function()
-    f:StartMoving()
-end)
-
-mainBtn:SetScript("OnDragStop", function()
-    f:StopMovingOrSizing()
-end)
-
--- Submenu
-
-local subMenu = CreateFrame("Frame", nil, f)
-subMenu:SetSize(160, 102)
-subMenu:SetPoint("TOPLEFT", mainBtn, "BOTTOMLEFT", 0, -2)
-subMenu:Hide()
-
--- Submenu background
-
-if E and E.SetTemplate then
-    subMenu:SetTemplate("Transparent")
-else
-    local bg = subMenu:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(subMenu)
-    bg:SetTexture(0, 0, 0, 0.8)
+local function SavePosition()
+    -- A top-left anchor keeps the header stationary when the menu expands.
+    ns.db.position = {
+        point = "TOPLEFT", relativePoint = "BOTTOMLEFT",
+        x = menu:GetLeft(), y = menu:GetTop(),
+    }
 end
-
--- Toggle menu state
-
-local isExpanded = false
-
-mainBtn:SetScript("OnClick", function()
-    if isExpanded then
-        subMenu:Hide()
-        mainBtn:SetText("Raid Sarcasm [+]")
-        f:SetHeight(26)
-        f:SetAlpha(0.70)
+local function RestorePosition()
+    menu:ClearAllPoints()
+    local p = ns.db.position
+    if p then
+        menu:SetPoint(p.point, UIParent, p.relativePoint, p.x, p.y)
     else
-        subMenu:Show()
-        mainBtn:SetText("Raid Sarcasm [-]")
-        f:SetHeight(130)
-        f:SetAlpha(1.00)
-    end
-
-    isExpanded = not isExpanded
-end)
-
--- Button 1: Lost Tank
-
-local btn1 = CreateFrame("Button", nil, subMenu)
-btn1:SetSize(150, 24)
-btn1:SetPoint("TOP", subMenu, "TOP", 0, -6)
-btn1:SetText("Lost Tank")
-
-SkinButton(btn1)
-
-btn1:SetScript("OnClick", function()
-    SendRandomEmote(lostTanks)
-end)
-
--- Button 2: Low DPS
-
-local btn2 = CreateFrame("Button", nil, subMenu)
-btn2:SetSize(150, 24)
-btn2:SetPoint("TOP", btn1, "BOTTOM", 0, -5)
-btn2:SetText("Low DPS")
-
-SkinButton(btn2)
-
-btn2:SetScript("OnClick", function()
-    SendRandomEmote(lowDps)
-end)
-
--- Button 3: No Threat
-
-local btn3 = CreateFrame("Button", nil, subMenu)
-btn3:SetSize(150, 24)
-btn3:SetPoint("TOP", btn2, "BOTTOM", 0, -5)
-btn3:SetText("No Threat")
-
-SkinButton(btn3)
-
-btn3:SetScript("OnClick", function()
-    SendRandomEmote(zeroThreat)
-end)
-
--- ElvUI font settings
-
-if E then
-    local font = E.media.normFont
-
-    if font then
-        mainBtn:GetFontString():SetFont(font, 12, "OUTLINE")
-        btn1:GetFontString():SetFont(font, 12, "OUTLINE")
-        btn2:GetFontString():SetFont(font, 12, "OUTLINE")
-        btn3:GetFontString():SetFont(font, 12, "OUTLINE")
+        menu:SetPoint("TOPLEFT", UIParent, "CENTER", -80, 13)
     end
 end
-
--- Menu slash command
-
-SLASH_RAIDSARCASM1 = "/rsmenu"
-
-SlashCmdList["RAIDSARCASM"] = function()
-    if f:IsShown() then
-        f:Hide()
-    else
-        f:Show()
-    end
+function ns.SetVisible(visible)
+    ns.db.visible = visible
+    if visible then menu:Show() else menu:Hide() end
 end
-
--- Hide the menu by default
-
-f:Hide()
-
-print("|cFF1784D1ElvUI|r |cFF00FF00RaidSarcasm loaded successfully!|r")
+local function UpdateExpanded()
+    local expanded = ns.db.expanded
+    mainButton:SetText(expanded and "Raid Sarcasm [-]" or "Raid Sarcasm [+]")
+    menu:SetHeight(expanded and (28 + subMenu:GetHeight()) or 26)
+    menu:SetAlpha(expanded and 1 or 0.7)
+    if expanded then subMenu:Show() else subMenu:Hide() end
+end
+function ns.ResetPosition()
+    ns.db.position = nil
+    ns.db.expanded = false
+    UpdateExpanded()
+    RestorePosition()
+    ns.SetVisible(true)
+    ns.Print("Menu position reset.")
+end
+local function ApplyElvUI()
+    if not IsAddOnLoaded("ElvUI") or type(ElvUI) ~= "table" then return end
+    local E = ElvUI[1]
+    if not E or not E.Skins or type(E.Skins.HandleButton) ~= "function" then return end
+    for _, button in ipairs(buttons) do
+        E.Skins:HandleButton(button)
+        local text = button:GetFontString()
+        if text and E.media and E.media.normFont then
+            text:SetFont(E.media.normFont, 12, "OUTLINE")
+        end
+    end
+    if subMenu.SetTemplate then subMenu:SetTemplate("Transparent") end
+end
+local function AddButton(parent, label)
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetNormalFontObject("GameFontNormal")
+    button:SetHighlightFontObject("GameFontHighlight")
+    button:SetText(label)
+    buttons[#buttons + 1] = button
+    return button
+end
+function ns.CreateUI()
+    if menu then return end
+    menu = CreateFrame("Frame", "RaidSarcasmMenu", UIParent)
+    menu:SetSize(160, 26)
+    menu:SetClampedToScreen(true)
+    menu:SetMovable(true)
+    menu:EnableMouse(true)
+    menu:RegisterForDrag("LeftButton")
+    local function StartDrag() menu:StartMoving() end
+    local function StopDrag()
+        menu:StopMovingOrSizing()
+        SavePosition()
+        RestorePosition()
+    end
+    menu:SetScript("OnDragStart", StartDrag)
+    menu:SetScript("OnDragStop", StopDrag)
+    mainButton = AddButton(menu, "Raid Sarcasm [+]")
+    mainButton:SetSize(160, 26)
+    mainButton:SetPoint("TOPLEFT", menu, "TOPLEFT", 0, 0)
+    mainButton:RegisterForDrag("LeftButton")
+    mainButton:SetScript("OnDragStart", StartDrag)
+    mainButton:SetScript("OnDragStop", StopDrag)
+    mainButton:SetScript("OnClick", function()
+        ns.db.expanded = not ns.db.expanded
+        UpdateExpanded()
+    end)
+    subMenu = CreateFrame("Frame", nil, menu)
+    subMenu:SetSize(160, math.max(12, 12 + #ns.categories * 29 - 5))
+    subMenu:SetPoint("TOPLEFT", mainButton, "BOTTOMLEFT", 0, -2)
+    subMenu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+    subMenu:SetBackdropColor(0, 0, 0, 0.85)
+    for index, category in ipairs(ns.categories) do
+        local entry = category
+        local button = AddButton(subMenu, entry.label)
+        button:SetSize(150, 24)
+        button:SetPoint("TOPLEFT", subMenu, "TOPLEFT", 5, -6 - (index - 1) * 29)
+        button:SetScript("OnClick", function() ns.SendRandomEmote(entry) end)
+    end
+    -- Optional styling must never prevent the base UI or commands from loading.
+    local ok = pcall(ApplyElvUI)
+    if not ok then ns.Print("ElvUI styling could not be fully applied; the menu remains available.") end
+    UpdateExpanded()
+    RestorePosition()
+    ns.SetVisible(ns.db.visible)
+end

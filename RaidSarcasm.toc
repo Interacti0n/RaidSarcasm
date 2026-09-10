@@ -2,6 +2,9 @@
 ## Title: RaidSarcasm
 ## Notes: Custom random emotes for "special" raid members.
 ## Author: Interacti0n
+## Version: 0.2.0
+## OptionalDeps: ElvUI
+## SavedVariablesPerCharacter: RaidSarcasmDB
 
 Core.lua
 Emotes.lua

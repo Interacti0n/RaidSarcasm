@@ -1,129 +1,119 @@
--- Emote sending function
-local function SendRandomEmote(emotesList)
+local addonName, ns = ...
+local lastSent
+local lastMessage = {}
+
+function ns.Print(message)
+    print("|cFF1784D1RaidSarcasm:|r " .. message)
+end
+
+function ns.SendRandomEmote(category)
+    if type(category) ~= "table" or type(category.id) ~= "string" or category.id == "" then
+        ns.Print("This category is invalid.")
+        return false
+    end
+    local messages = category.messages
+    if type(messages) ~= "table" or #messages == 0 then
+        ns.Print("This category has no messages.")
+        return false
+    end
+    for i = 1, #messages do
+        if type(messages[i]) ~= "string" or messages[i] == "" then
+            ns.Print("This category contains an invalid message.")
+            return false
+        end
+    end
     local target = UnitName("target")
     if not target then
-        print("|cFFFF0000RaidSarcasm: You need to select a target first!|r")
-        return
+        ns.Print("You need to select a target first!")
+        return false
     end
-    local randomIndex = math.random(1, #emotesList)
-    local formattedMessage = string.gsub(emotesList[randomIndex], "%%t", target)
-    SendChatMessage(formattedMessage, "EMOTE")
+    local now = GetTime()
+    local cooldown = ns.db.cooldown
+    if lastSent and now - lastSent < cooldown then
+        ns.Print(string.format("Wait %.1f seconds before sending another emote.", cooldown - (now - lastSent)))
+        return false
+    end
+    -- Exclude the previous text, including duplicate entries in custom categories.
+    local candidates = {}
+    for i = 1, #messages do
+        if messages[i] ~= lastMessage[category.id] then
+            candidates[#candidates + 1] = messages[i]
+        end
+    end
+    local message = #candidates > 0 and candidates[math.random(#candidates)] or messages[1]
+    -- A function replacement treats percent signs in target names literally.
+    local formatted = string.gsub(message, "%%t", function() return target end)
+    if #formatted > 255 then
+        ns.Print("This emote is too long to send (maximum 255 bytes).")
+        return false
+    end
+    SendChatMessage(formatted, "EMOTE")
+    lastSent = now
+    lastMessage[category.id] = message
+    return true
 end
 
-local E
-if IsAddOnLoaded("ElvUI") then
-    E = unpack(ElvUI)
+local anchorPoints = {
+    TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true,
+    RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+local function FiniteNumber(value)
+    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
-
-local function SkinButton(btn)
-    if E and E.Skins then
-        E.Skins:HandleButton(btn)
-    else
-        btn:SetNormalTexture("")
-        btn:SetHighlightTexture("")
-        btn:SetPushedTexture("")
+local function InitializeSettings()
+    if type(RaidSarcasmDB) ~= "table" then RaidSarcasmDB = {} end
+    ns.db = RaidSarcasmDB
+    if type(ns.db.visible) ~= "boolean" then ns.db.visible = true end
+    if type(ns.db.expanded) ~= "boolean" then ns.db.expanded = false end
+    if not FiniteNumber(ns.db.cooldown) or ns.db.cooldown < 0 or ns.db.cooldown > 60 then
+        ns.db.cooldown = 3
+    end
+    local p = ns.db.position
+    if type(p) ~= "table" or not anchorPoints[p.point] or not anchorPoints[p.relativePoint]
+        or not FiniteNumber(p.x) or not FiniteNumber(p.y) then
+        ns.db.position = nil
     end
 end
-
--- GUI MENU
-local f = CreateFrame("Frame", "RaidSarcasmMenu", UIParent)
-f:SetSize(160, 26)
-f:SetPoint("CENTER", 0, 0)
-
-f:SetMovable(true)
-f:EnableMouse(true)
-f:RegisterForDrag("LeftButton")
-f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-
--- Main button to toggle the menu
-local mainBtn = CreateFrame("Button", nil, f)
-mainBtn:SetSize(160, 26)
-mainBtn:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-mainBtn:SetText("Raid Sarcasm [+]")
-SkinButton(mainBtn)
-
-f:SetAlpha(0.70)
-
-mainBtn:RegisterForDrag("LeftButton")
-mainBtn:SetScript("OnDragStart", function() f:StartMoving() end)
-mainBtn:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
-
-local subMenu = CreateFrame("Frame", nil, f)
-subMenu:SetSize(160, 102)
-subMenu:SetPoint("TOPLEFT", mainBtn, "BOTTOMLEFT", 0, -2)
-subMenu:Hide()
-
-if E then
-    subMenu:SetTemplate("Transparent")
-else
-    local bg = subMenu:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(subMenu)
-    bg:SetTexture(0, 0, 0, 0.8)
-end
-
-local isExpanded = false
-mainBtn:SetScript("OnClick", function()
-    if isExpanded then
-        subMenu:Hide()
-        mainBtn:SetText("Raid Sarcasm [+]")
-        f:SetHeight(26)
-        f:SetAlpha(0.70) 
-    else
-        subMenu:Show()
-        mainBtn:SetText("Raid Sarcasm [-]")
-        f:SetHeight(130)
-        f:SetAlpha(1.00)
+local function RegisterCommands()
+    for _, category in ipairs(ns.categories) do
+        local entry = category
+        local key = "RAIDSARCASM_" .. string.upper(entry.id)
+        _G["SLASH_" .. key .. "1"] = entry.command
+        SlashCmdList[key] = function() ns.SendRandomEmote(entry) end
     end
-    isExpanded = not isExpanded
+    SLASH_RAIDSARCASM1 = "/rsmenu"
+    SlashCmdList.RAIDSARCASM = function(input)
+        local command, argument = string.match(string.lower(input or ""), "^%s*(%S*)%s*(.-)%s*$")
+        if command == "" then
+            ns.SetVisible(not ns.db.visible)
+        elseif command == "show" then
+            ns.SetVisible(true)
+        elseif command == "hide" then
+            ns.SetVisible(false)
+        elseif command == "reset" then
+            ns.ResetPosition()
+        elseif command == "cooldown" then
+            local seconds = tonumber(argument)
+            if FiniteNumber(seconds) and seconds >= 0 and seconds <= 60 then
+                ns.db.cooldown = seconds
+                ns.Print("Cooldown set to " .. seconds .. " seconds.")
+            else
+                ns.Print("Usage: /rsmenu cooldown 0-60 (0 disables the cooldown).")
+            end
+        else
+            ns.Print("/rsmenu [show|hide|reset|cooldown 0-60|help]")
+            for _, category in ipairs(ns.categories) do
+                ns.Print(category.command .. " - " .. category.label)
+            end
+        end
+    end
+end
+local loader = CreateFrame("Frame")
+loader:RegisterEvent("PLAYER_LOGIN")
+loader:SetScript("OnEvent", function(self)
+    InitializeSettings()
+    ns.CreateUI()
+    RegisterCommands()
+    self:UnregisterEvent("PLAYER_LOGIN")
+    ns.Print("Loaded. Use /rsmenu to toggle the menu or /rsmenu help for commands.")
 end)
-
--- Button 1: Lost Tank
-local btn1 = CreateFrame("Button", nil, subMenu)
-btn1:SetSize(150, 24)
-btn1:SetPoint("TOP", subMenu, "TOP", 0, -6)
-btn1:SetText("Lost Tank")
-SkinButton(btn1)
-btn1:SetScript("OnClick", function() SendRandomEmote(lostTanks) end)
-
--- Button 2: Low DPS
-local btn2 = CreateFrame("Button", nil, subMenu)
-btn2:SetSize(150, 24)
-btn2:SetPoint("TOP", btn1, "BOTTOM", 0, -5)
-btn2:SetText("Low DPS")
-SkinButton(btn2)
-btn2:SetScript("OnClick", function() SendRandomEmote(lowDps) end)
-
--- Button 3: No Threat
-local btn3 = CreateFrame("Button", nil, subMenu)
-btn3:SetSize(150, 24)
-btn3:SetPoint("TOP", btn2, "BOTTOM", 0, -5)
-btn3:SetText("No Threat")
-SkinButton(btn3)
-btn3:SetScript("OnClick", function() SendRandomEmote(zeroThreat) end)
-
-if E then
-    local font = E.media.normFont
-    if font then
-        mainBtn:GetFontString():SetFont(font, 12, "OUTLINE")
-        btn1:GetFontString():SetFont(font, 12, "OUTLINE")
-        btn2:GetFontString():SetFont(font, 12, "OUTLINE")
-        btn3:GetFontString():SetFont(font, 12, "OUTLINE")
-    end
-end
-
-SLASH_LOSTTANK1 = "/losttank"
-SlashCmdList["LOSTTANK"] = function() SendRandomEmote(lostTanks) end
-
-SLASH_BADPLAY1 = "/badplay"
-SlashCmdList["BADPLAY"] = function() SendRandomEmote(lowDps) end
-
-SLASH_NOTHREAT1 = "/nothreat"
-SlashCmdList["NOTHREAT"] = function() SendRandomEmote(zeroThreat) end
-
-SLASH_RAIDSARCASM1 = "/rsmenu"
-SlashCmdList["RAIDSARCASM"] = function()
-    if f:IsShown() then f:Hide() else f:Show() end
-end
-
-print("|cFF1784D1ElvUI|r |cFF00FF00RaidSarcasm loaded successfully!|r")
