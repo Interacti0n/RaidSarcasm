@@ -1,6 +1,7 @@
 local addonName, ns = ...
 local menu, mainButton, subMenu
 local buttons = {}
+local categoryButtons = {}
 
 local function SavePosition()
     -- A top-left anchor keeps the header stationary when the menu expands.
@@ -15,7 +16,7 @@ local function RestorePosition()
     if p then
         menu:SetPoint(p.point, UIParent, p.relativePoint, p.x, p.y)
     else
-        menu:SetPoint("TOPLEFT", UIParent, "CENTER", -80, 13)
+        menu:SetPoint("TOPLEFT", UIParent, "CENTER", -105, 13)
     end
 end
 function ns.SetVisible(visible)
@@ -24,7 +25,7 @@ function ns.SetVisible(visible)
 end
 local function UpdateExpanded()
     local expanded = ns.db.expanded
-    mainButton:SetText(expanded and "Raid Sarcasm [-]" or "Raid Sarcasm [+]")
+    mainButton:SetText(ns.Text("title") .. (expanded and " [-]" or " [+]"))
     menu:SetHeight(expanded and (28 + subMenu:GetHeight()) or 26)
     menu:SetAlpha(expanded and 1 or 0.7)
     if expanded then subMenu:Show() else subMenu:Hide() end
@@ -35,7 +36,13 @@ function ns.ResetPosition()
     UpdateExpanded()
     RestorePosition()
     ns.SetVisible(true)
-    ns.Print("Menu position reset.")
+    ns.Print(ns.Text("menuReset"))
+end
+
+function ns.RefreshUI()
+    if not menu then return end
+    UpdateExpanded()
+    for id, button in pairs(categoryButtons) do button:SetText(ns.GetCategoryLabel(id)) end
 end
 local function ApplyElvUI()
     if not IsAddOnLoaded("ElvUI") or type(ElvUI) ~= "table" then return end
@@ -61,7 +68,7 @@ end
 function ns.CreateUI()
     if menu then return end
     menu = CreateFrame("Frame", "RaidSarcasmMenu", UIParent)
-    menu:SetSize(160, 26)
+    menu:SetSize(210, 26)
     menu:SetClampedToScreen(true)
     menu:SetMovable(true)
     menu:EnableMouse(true)
@@ -74,8 +81,8 @@ function ns.CreateUI()
     end
     menu:SetScript("OnDragStart", StartDrag)
     menu:SetScript("OnDragStop", StopDrag)
-    mainButton = AddButton(menu, "Raid Sarcasm [+]")
-    mainButton:SetSize(160, 26)
+    mainButton = AddButton(menu, ns.Text("title") .. " [+]")
+    mainButton:SetSize(210, 26)
     mainButton:SetPoint("TOPLEFT", menu, "TOPLEFT", 0, 0)
     mainButton:RegisterForDrag("LeftButton")
     mainButton:SetScript("OnDragStart", StartDrag)
@@ -85,14 +92,15 @@ function ns.CreateUI()
         UpdateExpanded()
     end)
     subMenu = CreateFrame("Frame", nil, menu)
-    subMenu:SetSize(160, math.max(12, 12 + #ns.categories * 29 - 5))
+    subMenu:SetSize(210, math.max(12, 12 + #ns.categories * 29 - 5))
     subMenu:SetPoint("TOPLEFT", mainButton, "BOTTOMLEFT", 0, -2)
     subMenu:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
     subMenu:SetBackdropColor(0, 0, 0, 0.85)
     for index, category in ipairs(ns.categories) do
         local entry = category
-        local button = AddButton(subMenu, entry.label)
-        button:SetSize(150, 24)
+        local button = AddButton(subMenu, ns.GetCategoryLabel(entry.id))
+        categoryButtons[entry.id] = button
+        button:SetSize(200, 24)
         button:SetPoint("TOPLEFT", subMenu, "TOPLEFT", 5, -6 - (index - 1) * 29)
         button:SetScript("OnClick", function() ns.SendRandomEmote(entry) end)
     end

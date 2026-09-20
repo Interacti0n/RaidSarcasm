@@ -4,6 +4,21 @@ All notable changes to RaidSarcasm are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Automatic localization for all eleven WoW addon locales.
+- Manually selectable Slovak and Czech translations.
+- A saved per-character language override with English per-string fallback.
+- A language selector under Interface Options → AddOns → RaidSarcasm.
+- `/rsmenu language`, `/rsmenu lang`, and `/rsmenu settings` commands.
+
+### Changed
+
+- Widened the menu to accommodate longer translated category names.
+- Kept every slash command identical across languages.
+
 ## 0.2.0 - 2026-09-10
 
 ### Added

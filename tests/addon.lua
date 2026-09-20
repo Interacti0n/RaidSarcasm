@@ -5,7 +5,7 @@ local function check(value, message)
     assert(value, message)
 end
 
-local function Boot(saved, skinMode)
+local function Boot(saved, skinMode, clientLocale)
     local state = { frames = {}, sent = {}, logs = {}, now = 0, target = "TestTarget", skinned = 0 }
     local env = setmetatable({}, { __index = _G })
     env._G = env
@@ -13,6 +13,7 @@ local function Boot(saved, skinMode)
     env.RaidSarcasmDB = saved
     env.print = function(message) state.logs[#state.logs + 1] = message end
     env.GetTime = function() return state.now end
+    env.GetLocale = function() return clientLocale or "enUS" end
     env.UnitName = function(unit) assert(unit == "target"); return state.target end
     env.IsAddOnLoaded = function(name) return name == "ElvUI" and skinMode ~= nil end
     env.SendChatMessage = function(text, channel)
@@ -43,6 +44,13 @@ local function Boot(saved, skinMode)
     function methods:GetFontString() return self.fontString end
     function methods:SetBackdrop(backdrop) self.backdrop = backdrop end
     function methods:SetBackdropColor(...) self.color = { ... } end
+    function methods:SetWidth(width) self.width = width end
+    function methods:SetJustifyH(value) self.justifyH = value end
+    function methods:CreateFontString()
+        local font = { SetPoint = methods.SetPoint, SetWidth = methods.SetWidth,
+            SetJustifyH = methods.SetJustifyH, SetText = function(self, text) self.text = text end }
+        return font
+    end
     function methods:Show() self.shown = true end
     function methods:Hide() self.shown = false end
     function methods:IsShown() return self.shown end
@@ -69,6 +77,15 @@ local function Boot(saved, skinMode)
         return f
     end
     env.UIParent = env.CreateFrame("Frame")
+    env.InterfaceOptionsFramePanelContainer = env.CreateFrame("Frame")
+    env.InterfaceOptions_AddCategory = function() end
+    env.InterfaceOptionsFrame_OpenToCategory = function() end
+    env.UIDropDownMenu_CreateInfo = function() return {} end
+    env.UIDropDownMenu_AddButton = function() end
+    env.UIDropDownMenu_SetWidth = function() end
+    env.UIDropDownMenu_Initialize = function(frame, handler) frame.dropdownHandler = handler end
+    env.UIDropDownMenu_SetSelectedValue = function(frame, value) frame.selectedValue = value end
+    env.UIDropDownMenu_SetText = function(frame, text) frame.dropdownText = text end
     local ns = {}
     local tocText = os.getenv("RAIDSARCASM_TEST_TOC")
     if not tocText then
@@ -76,8 +93,9 @@ local function Boot(saved, skinMode)
         tocText = toc:read("*a")
         toc:close()
     end
+    check(not tocText:find("\\\\", 1, true), "TOC paths must use single backslash separators")
     for line in tocText:gmatch("[^\r\n]+") do
-        local file = line:match("^([%w_]+%.lua)%s*$")
+        local file = line:match("^([%w_\\/]+%.lua)%s*$")
         if file then
             local chunk
             if setfenv then chunk = setfenv(assert(loadfile(file)), env)
@@ -97,12 +115,13 @@ end
 local s = Boot()
 check(s.menu and s.menu.clamped and s.menu.shown, "Menu must be visible and clamped")
 check(s.ns.db.cooldown == 3 and not s.ns.db.expanded, "Default settings")
+check(s.ns.activeLocale == "enUS" and s.ns.db.language == "auto", "Automatic English locale")
 check(#s.ns.categories == 10, "Expected category count")
 local categoryIds, categoryCommands = {}, {}
 for _, category in ipairs(s.ns.categories) do
     check(not categoryIds[category.id], "Category IDs must be unique")
     check(not categoryCommands[category.command], "Category commands must be unique")
-    check(#category.messages == 10, "Each built-in category has ten messages")
+    check(#s.ns.GetMessages(category.id) == 10, "Each built-in category has ten messages")
     categoryIds[category.id] = true
     categoryCommands[category.command] = true
 end
@@ -130,13 +149,9 @@ for i = 1, 30 do
     check(s.ns.SendRandomEmote(s.ns.categories[1]), "Repeated send")
     check(previous ~= s.sent[#s.sent].text, "No consecutive duplicate text")
 end
-check(not s.ns.SendRandomEmote({ id = "empty", messages = {} }), "Empty category")
 check(not s.ns.SendRandomEmote(nil), "Missing category")
 check(not s.ns.SendRandomEmote({ messages = { "waves" } }), "Missing category ID")
-check(not s.ns.SendRandomEmote({ id = "bad", messages = { false } }), "Invalid message")
-check(not s.ns.SendRandomEmote({ id = "long", messages = { string.rep("x", 256) } }), "Oversize message")
-check(s.ns.SendRandomEmote({ id = "single", messages = { "waves to %t" } }), "Single message category")
-check(s.ns.SendRandomEmote({ id = "single", messages = { "waves to %t" } }), "Single message can repeat")
+check(not s.ns.SendRandomEmote({ id = "unknown" }), "Unknown category")
 for _, value in ipairs({ "-1", "61", "abc", "1e999" }) do
     s.command("cooldown " .. value)
     check(s.ns.db.cooldown == 0, "Invalid cooldown must not overwrite setting")
@@ -148,9 +163,9 @@ for _, f in ipairs(s.frames) do
         f.scripts.OnClick()
         check(#s.sent == previousCount + 1, "Category button must send")
         local category
-        for _, entry in ipairs(s.ns.categories) do if entry.label == f.text then category = entry end end
+        for _, entry in ipairs(s.ns.categories) do if s.ns.GetCategoryLabel(entry.id) == f.text then category = entry end end
         local found = false
-        for _, message in ipairs(category.messages) do
+        for _, message in ipairs(s.ns.GetMessages(category.id)) do
             if message:gsub("%%t", function() return s.target end) == s.sent[#s.sent].text then found = true end
         end
         check(found, "Button must use its own category")
@@ -181,4 +196,25 @@ local corrupt = Boot({ cooldown = 0/0, position = {point = "INVALID"}, visible =
 check(corrupt.ns.db.cooldown == 3 and corrupt.ns.db.position == nil and corrupt.menu.shown, "Repair corrupt settings")
 local invalid = Boot("invalid")
 check(type(invalid.ns.db) == "table", "Repair invalid saved variable")
+local german = Boot(nil, nil, "deDE")
+check(german.ns.activeLocale == "deDE", "Detect supported client locale")
+check(german.ns.GetCategoryLabel("lowdps") ~= "Low DPS", "Localized category label")
+check(german.ns.SetLanguage("skSK") and german.ns.db.language == "skSK", "Manual language selection")
+check(german.ns.SetLanguage("czCZ") and german.ns.db.language == "csCZ", "Czech alias")
+check(german.ns.SetLanguage("auto") and german.ns.activeLocale == "deDE", "Return to automatic locale")
+for _, locale in ipairs(german.ns.localeOrder) do
+    if locale ~= "auto" then
+        local data = german.ns.locales[locale]
+        check(data ~= nil, "Registered locale " .. locale)
+        for _, category in ipairs(german.ns.categories) do
+            local translated = data.categories[category.id]
+            check(translated and type(translated.label) == "string", locale .. " category label")
+            check(#translated.messages == 10, locale .. " message count")
+            for _, message in ipairs(translated.messages) do
+                check(message:find("%%t") ~= nil, locale .. " target placeholder")
+                check(#message + 20 <= 255, locale .. " chat length")
+            end
+        end
+    end
+end
 print("PASS: " .. checks .. " checks (mock WoW API; live client verification still required)")

@@ -2,7 +2,7 @@
 
 RaidSarcasm sends a random sarcastic emote about your current target. It is a small, manually operated addon for the original World of Warcraft: Mists of Pandaria 5.4.8 client (Interface 50400).
 
-Current version: **0.2.0**. See [CHANGELOG.md](CHANGELOG.md) for release history.
+Current development version: **0.3.0**. See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -13,6 +13,7 @@ Current version: **0.2.0**. See [CHANGELOG.md](CHANGELOG.md) for release history
 - No consecutive repetition within a category when a different message is available.
 - Checks for missing targets, invalid categories, and messages over 255 bytes.
 - Screen clamping and a recovery command for the menu.
+- Automatic localization with a saved per-character language override.
 
 The addon uses your already selected target; it does not select targets or assess player performance. Messages use the `EMOTE` chat type, not the `RAID` channel, so they are not raid-wide announcements. No message is sent automatically.
 
@@ -38,6 +39,9 @@ Enable RaidSarcasm in the character selection addon list and log in. The menu st
 | `/rsmenu reset` | Center, collapse, and show the menu; keep the cooldown setting |
 | `/rsmenu cooldown 5` | Set a shared 5-second cooldown |
 | `/rsmenu cooldown 0` | Disable the cooldown |
+| `/rsmenu settings` | Open the addon settings panel |
+| `/rsmenu language auto` | Follow the current WoW client locale |
+| `/rsmenu language deDE` | Select a language manually |
 | `/rsmenu help` | Show command help |
 
 The first emote after login can be sent immediately. Repetition history and the current cooldown timer reset at login or `/reload`; the configured cooldown duration persists. A category with only one distinct message necessarily repeats it.
@@ -49,13 +53,23 @@ The first emote after login can be sent immediately. Repetition history and the 
 - UI initialization waits for `PLAYER_LOGIN`. An ElvUI skinning error is reported without blocking commands or menu initialization; styling may be partially applied.
 - Live rendering and server chat behavior still need verification in the target game client.
 
+## Languages
+
+RaidSarcasm automatically follows `GetLocale()` and supports `enUS`, `deDE`, `frFR`, `esES`, `esMX`, `itIT`, `ptBR`, `ruRU`, `koKR`, `zhCN`, and `zhTW`. English clients reporting `enGB` use `enUS`, and `ptPT` uses `ptBR`.
+
+Slovak (`skSK`) and Czech (`csCZ`, with `czCZ` accepted as an alias) are additional manual choices because WoW does not report these locales. Change the language under **Interface → AddOns → RaidSarcasm** or with `/rsmenu language locale`. The choice is saved for the current character. Slash commands remain English in every language.
+
+English is the per-string fallback. The non-English emotes have an initial complete translation, but humorous phrasing benefits from review by native speakers before a public 0.3.0 release.
+
 ## Development
 
 The files share WoW's private addon namespace through `local addonName, ns = ...`:
 
 - `Core.lua`: settings validation, message selection, cooldown, login initialization, and slash commands.
-- `Emotes.lua`: message text and the ordered `ns.categories` registry.
+- `Emotes.lua`: the ordered category IDs and language-independent slash commands.
+- `Localization.lua` and `Locales/`: locale selection, fallback behavior, UI text, and emote translations.
 - `UI.lua`: the single menu, generated category buttons, positioning, and optional styling.
+- `Options.lua`: the Blizzard Interface Options language selector.
 
 To add a category, append an entry to `ns.categories` in `Emotes.lua`:
 

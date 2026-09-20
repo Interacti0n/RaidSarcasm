@@ -2,10 +2,25 @@
 ## Title: RaidSarcasm
 ## Notes: Custom random emotes for "special" raid members.
 ## Author: Interacti0n
-## Version: 0.2.0
+## Version: 0.3.0
 ## OptionalDeps: ElvUI
 ## SavedVariablesPerCharacter: RaidSarcasmDB
 
-Core.lua
+Localization.lua
+Locales\enUS.lua
+Locales\deDE.lua
+Locales\frFR.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\itIT.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\koKR.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+Locales\skSK.lua
+Locales\csCZ.lua
 Emotes.lua
+Core.lua
 UI.lua
+Options.lua
